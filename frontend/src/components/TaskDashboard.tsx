@@ -214,84 +214,93 @@ export function TaskDashboard({ initialTasks, onAddMore }: TaskDashboardProps) {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <div className="logo">
-          <div className="logo-icon">
-            <Zap size={20} />
-          </div>
-          <div className="logo-text">
-            <h1>{greeting}, {userName}</h1>
-            <span className="logo-subtitle">TaskFlow AI - Powered by Intelligence</span>
+        {/* Left: Logo and Greeting */}
+        <div className="header-left">
+          <div className="logo">
+            <div className="logo-icon">
+              <Zap size={20} />
+            </div>
+            <div className="logo-text">
+              <h1 className="logo-title"><span className="greeting-text">{greeting},</span> {userName}</h1>
+              <span className="logo-subtitle">TaskFlow AI - Powered by Intelligence</span>
+            </div>
           </div>
         </div>
 
-        <div className="header-actions">
-          <motion.button
-            onClick={onAddMore}
-            className="add-btn"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            title="Add new tasks"
-          >
-            <Plus size={18} />
-            Add tasks
-          </motion.button>
+        {/* Center: Action Buttons */}
+        <div className="header-center">
+          <div className="action-group">
+            <motion.button
+              onClick={onAddMore}
+              className="header-btn primary-btn"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              title="Add new tasks"
+            >
+              <Plus size={18} />
+              <span>Add Tasks</span>
+            </motion.button>
 
-          <motion.button
-            onClick={() => setTeamsModalOpen(true)}
-            className="teams-btn"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            title="Get your latest Teams mentions"
-          >
-            <MessageSquare size={18} />
-            Teams Mentions
-          </motion.button>
+            <motion.button
+              onClick={() => setTeamsModalOpen(true)}
+              className="header-btn teams-btn"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              title="Get your latest Teams mentions"
+            >
+              <MessageSquare size={18} />
+              <span>Teams</span>
+            </motion.button>
 
-          <motion.button
-            onClick={() => setAnalyzerOpen(true)}
-            className="analyzer-btn"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            title="Analyze messy messages with AI"
-          >
-            <Wand2 size={18} />
-            Analyze
-          </motion.button>
+            <motion.button
+              onClick={() => setAnalyzerOpen(true)}
+              className="header-btn analyzer-btn"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              title="Analyze messy messages with AI"
+            >
+              <Wand2 size={18} />
+              <span>Analyze</span>
+            </motion.button>
 
-          <motion.button
-            onClick={handleReanalyze}
-            className="reanalyze-btn"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            disabled={isReanalyzing || tasks.length === 0}
-            title="Re-analyze existing tasks to improve quality"
-          >
-            {isReanalyzing ? (
-              <motion.span
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-                style={{ display: 'flex' }}
-              >
-                <Loader2 size={18} />
-              </motion.span>
-            ) : (
-              <RefreshCw size={18} />
-            )}
-            {isReanalyzing ? 'Improving...' : 'Improve Tasks'}
-          </motion.button>
+            <motion.button
+              onClick={handleReanalyze}
+              className="header-btn reanalyze-btn"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              disabled={isReanalyzing || tasks.length === 0}
+              title="Re-analyze existing tasks to improve quality"
+            >
+              {isReanalyzing ? (
+                <motion.span
+                  animate={{ rotate: 360 }}
+                  transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                  style={{ display: 'flex' }}
+                >
+                  <Loader2 size={18} />
+                </motion.span>
+              ) : (
+                <RefreshCw size={18} />
+              )}
+              <span>{isReanalyzing ? 'Improving...' : 'Improve'}</span>
+            </motion.button>
 
-          <motion.button
-            onClick={() => setDeleteAllModalOpen(true)}
-            className="delete-all-btn"
-            whileHover={{ scale: 1.02 }}
-            whileTap={{ scale: 0.98 }}
-            disabled={tasks.length === 0}
-            title="Delete all tasks"
-          >
-            <Trash2 size={18} />
-            Delete All
-          </motion.button>
+            <motion.button
+              onClick={() => setDeleteAllModalOpen(true)}
+              className="header-btn delete-btn"
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              disabled={tasks.length === 0}
+              title="Delete all tasks"
+            >
+              <Trash2 size={18} />
+              <span>Delete All</span>
+            </motion.button>
+          </div>
+        </div>
 
+        {/* Right: View Controls & Settings */}
+        <div className="header-right">
           <div className="view-toggle">
             <button
               className={view === 'list' ? 'active' : ''}
@@ -327,50 +336,52 @@ export function TaskDashboard({ initialTasks, onAddMore }: TaskDashboardProps) {
             </button>
           </div>
 
-          <motion.button
-            className="theme-toggle"
-            onClick={toggleTheme}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
-          >
-            <AnimatePresence mode="wait">
-              {isDark ? (
-                <motion.span
-                  key="sun"
-                  initial={{ rotate: -90, opacity: 0 }}
-                  animate={{ rotate: 0, opacity: 1 }}
-                  exit={{ rotate: 90, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Sun size={18} />
-                </motion.span>
-              ) : (
-                <motion.span
-                  key="moon"
-                  initial={{ rotate: 90, opacity: 0 }}
-                  animate={{ rotate: 0, opacity: 1 }}
-                  exit={{ rotate: -90, opacity: 0 }}
-                  transition={{ duration: 0.2 }}
-                >
-                  <Moon size={18} />
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </motion.button>
+          <div className="control-group">
+            <ReminderPanel refreshTrigger={refreshTrigger} />
 
-          <motion.button
-            className="settings-btn"
-            onClick={() => setSettingsOpen(true)}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            title="Open settings"
-          >
-            <Settings size={18} />
-          </motion.button>
+            <motion.button
+              className="icon-btn theme-toggle"
+              onClick={toggleTheme}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              title={isDark ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              <AnimatePresence mode="wait">
+                {isDark ? (
+                  <motion.span
+                    key="sun"
+                    initial={{ rotate: -90, opacity: 0 }}
+                    animate={{ rotate: 0, opacity: 1 }}
+                    exit={{ rotate: 90, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <Sun size={18} />
+                  </motion.span>
+                ) : (
+                  <motion.span
+                    key="moon"
+                    initial={{ rotate: 90, opacity: 0 }}
+                    animate={{ rotate: 0, opacity: 1 }}
+                    exit={{ rotate: -90, opacity: 0 }}
+                    transition={{ duration: 0.2 }}
+                  >
+                    <Moon size={18} />
+                  </motion.span>
+                )}
+              </AnimatePresence>
+            </motion.button>
+
+            <motion.button
+              className="icon-btn settings-btn"
+              onClick={() => setSettingsOpen(true)}
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              title="Open settings"
+            >
+              <Settings size={18} />
+            </motion.button>
+          </div>
         </div>
-
-        <ReminderPanel refreshTrigger={refreshTrigger} />
 
         {/* Reanalyze Result Toast */}
         <AnimatePresence>

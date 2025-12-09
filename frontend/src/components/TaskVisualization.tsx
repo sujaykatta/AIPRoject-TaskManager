@@ -193,7 +193,9 @@ export function TaskVisualization({ refreshTrigger, onTaskDeleted }: TaskVisuali
     setLoading(true);
     try {
       const data = await taskApi.getAll();
-      setTasks(data);
+      // Filter out Done tasks from visualization
+      const filteredTasks = data.filter((task) => task.status !== 'Done');
+      setTasks(filteredTasks);
     } catch (err) {
       console.error('Failed to fetch tasks:', err);
     } finally {

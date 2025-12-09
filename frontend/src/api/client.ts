@@ -157,16 +157,61 @@ export const teamsApi = {
     return response.data;
   },
 
-  getUserMentions: async (accessToken: string, limit: number = 5): Promise<TeamsMentionsResponse> => {
+  getUserMentions: async (
+    accessToken: string,
+    limit: number = 25,
+    filters?: {
+      users?: string[];
+      groupChats?: string[];
+      meetingChats?: string[];
+      individualChats?: string[];
+    }
+  ): Promise<TeamsMentionsResponse> => {
+    const params: any = { access_token: accessToken, limit };
+    if (filters?.users && filters.users.length > 0) {
+      params.users = filters.users.join(',');
+    }
+    if (filters?.groupChats && filters.groupChats.length > 0) {
+      params.group_chats = filters.groupChats.join(',');
+    }
+    if (filters?.meetingChats && filters.meetingChats.length > 0) {
+      params.meeting_chats = filters.meetingChats.join(',');
+    }
+    if (filters?.individualChats && filters.individualChats.length > 0) {
+      params.individual_chats = filters.individualChats.join(',');
+    }
+
     const response = await api.get<TeamsMentionsResponse>('/teams/mentions/user', {
-      params: { access_token: accessToken, limit },
+      params,
     });
     return response.data;
   },
 
-  getDemoMentions: async (limit: number = 5): Promise<TeamsMentionsResponse> => {
+  getDemoMentions: async (
+    limit: number = 25,
+    filters?: {
+      users?: string[];
+      groupChats?: string[];
+      meetingChats?: string[];
+      individualChats?: string[];
+    }
+  ): Promise<TeamsMentionsResponse> => {
+    const params: any = { limit };
+    if (filters?.users && filters.users.length > 0) {
+      params.users = filters.users.join(',');
+    }
+    if (filters?.groupChats && filters.groupChats.length > 0) {
+      params.group_chats = filters.groupChats.join(',');
+    }
+    if (filters?.meetingChats && filters.meetingChats.length > 0) {
+      params.meeting_chats = filters.meetingChats.join(',');
+    }
+    if (filters?.individualChats && filters.individualChats.length > 0) {
+      params.individual_chats = filters.individualChats.join(',');
+    }
+
     const response = await api.get<TeamsMentionsResponse>('/teams/mentions/demo', {
-      params: { limit },
+      params,
     });
     return response.data;
   },

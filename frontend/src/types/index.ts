@@ -172,6 +172,14 @@ export interface TeamsMention {
   timestamp: string;
   web_url?: string | null;
   is_from_channel: boolean;
+  // New metadata fields
+  chat_type?: string | null; // 'individual', 'group', 'meeting'
+  chat_id?: string | null;
+  requested_by?: string | null;
+  requested_at?: string | null;
+  graph_metadata?: Record<string, any> | null;
+  // Status field
+  status?: string | null; // 'Open', 'In Progress', 'Done'
 }
 
 export interface TeamsMentionsResponse {

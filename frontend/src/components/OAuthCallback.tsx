@@ -1,10 +1,19 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { teamsApi } from '../api/client';
 
 export function OAuthCallback() {
+  // Prevent double execution in React StrictMode
+  const hasExchanged = useRef(false);
+
   useEffect(() => {
+    // If already exchanged, skip (prevents React StrictMode double-call)
+    if (hasExchanged.current) {
+      return;
+    }
+    hasExchanged.current = true;
+
     const handleCallback = async () => {
       // Get authorization code and state from URL
       const params = new URLSearchParams(window.location.search);

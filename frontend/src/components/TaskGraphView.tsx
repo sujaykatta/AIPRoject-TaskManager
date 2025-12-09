@@ -19,27 +19,29 @@ export function TaskGraphView({ refreshTrigger, onTaskDeleted }: TaskGraphViewPr
     try {
       const data = await graphApi.get();
 
-      // Convert API response to TaskGraphData format
-      const graphTasks: TaskGraphData[] = data.nodes.map((node) => {
-        // Map category to the 4 main categories
-        let category: TaskGraphData['category'] = 'message';
-        if (node.category === 'deploy') category = 'deploy';
-        else if (node.category === 'jira_update') category = 'jira_update';
-        else if (node.category === 'reminder') category = 'reminder';
-        else if (node.category === 'message' || node.category === 'email') category = 'message';
-        else category = 'message'; // default for 'other'
+      // Convert API response to TaskGraphData format and filter out Done items
+      const graphTasks: TaskGraphData[] = data.nodes
+        .filter((node) => node.status !== 'Done') // Exclude Done status
+        .map((node) => {
+          // Map category to the 4 main categories
+          let category: TaskGraphData['category'] = 'message';
+          if (node.category === 'deploy') category = 'deploy';
+          else if (node.category === 'jira_update') category = 'jira_update';
+          else if (node.category === 'reminder') category = 'reminder';
+          else if (node.category === 'message' || node.category === 'email') category = 'message';
+          else category = 'message'; // default for 'other'
 
-        return {
-          id: node.id,
-          text: node.label,
-          category,
-          time: node.time || null,
-          dependsOn: node.dependsOn || [],
-          raw_text: node.raw_text,
-          original_message: node.original_message,
-          was_improved: node.was_improved,
-        };
-      });
+          return {
+            id: node.id,
+            text: node.label,
+            category,
+            time: node.time || null,
+            dependsOn: node.dependsOn || [],
+            raw_text: node.raw_text,
+            original_message: node.original_message,
+            was_improved: node.was_improved,
+          };
+        });
 
       setTasks(graphTasks);
     } catch (err) {

@@ -23,6 +23,14 @@ class TeamsMention(BaseModel):
     timestamp: datetime
     web_url: Optional[str] = None
     is_from_channel: bool = False
+    # New metadata fields
+    chat_type: Optional[str] = None  # 'individual', 'group', 'meeting'
+    chat_id: Optional[str] = None
+    requested_by: Optional[str] = None
+    requested_at: Optional[datetime] = None
+    graph_metadata: Optional[dict] = None
+    # Status field
+    status: Optional[str] = "Open"  # 'Open', 'In Progress', 'Done'
 
 
 class TeamsServiceError(Exception):
@@ -265,6 +273,8 @@ class TeamsService:
         """
         from datetime import timedelta
 
+        now = datetime.now()
+
         mock_mentions = [
             TeamsMention(
                 id="mock-1",
@@ -272,8 +282,14 @@ class TeamsService:
                 sender_name="Sarah Chen",
                 sender_email="sarah.chen@company.com",
                 chat_name="Dev Team",
-                timestamp=datetime.now() - timedelta(hours=1),
+                timestamp=now - timedelta(hours=1),
                 is_from_channel=False,
+                chat_type="group",
+                chat_id="mock-chat-1",
+                requested_by="demo_user",
+                requested_at=now - timedelta(hours=1),
+                graph_metadata={"chatType": "group", "memberCount": 5},
+                status="Open",
             ),
             TeamsMention(
                 id="mock-2",
@@ -282,17 +298,29 @@ class TeamsService:
                 sender_email="mike.j@company.com",
                 channel_name="General",
                 team_name="Backend Team",
-                timestamp=datetime.now() - timedelta(hours=3),
+                timestamp=now - timedelta(hours=3),
                 is_from_channel=True,
+                chat_type="group",
+                chat_id="mock-chat-2",
+                requested_by="demo_user",
+                requested_at=now - timedelta(hours=3),
+                graph_metadata={"chatType": "group", "isChannel": True},
+                status="In Progress",
             ),
             TeamsMention(
                 id="mock-3",
                 message_text="@You Reminder: Sprint planning meeting tomorrow at 10 AM. Please have your estimates ready.",
                 sender_name="Emily Davis",
                 sender_email="emily.d@company.com",
-                chat_name="Project Alpha",
-                timestamp=datetime.now() - timedelta(hours=5),
+                chat_name="Sprint Planning Meeting",
+                timestamp=now - timedelta(hours=5),
                 is_from_channel=False,
+                chat_type="meeting",
+                chat_id="mock-chat-3",
+                requested_by="demo_user",
+                requested_at=now - timedelta(hours=5),
+                graph_metadata={"chatType": "meeting", "meetingId": "meeting-123"},
+                status="Done",
             ),
             TeamsMention(
                 id="mock-4",
@@ -301,17 +329,44 @@ class TeamsService:
                 sender_email="james.w@company.com",
                 channel_name="Deployments",
                 team_name="DevOps",
-                timestamp=datetime.now() - timedelta(hours=8),
+                timestamp=now - timedelta(hours=8),
                 is_from_channel=True,
+                chat_type="group",
+                chat_id="mock-chat-4",
+                requested_by="demo_user",
+                requested_at=now - timedelta(hours=8),
+                graph_metadata={"chatType": "group", "isChannel": True},
+                status="Open",
             ),
             TeamsMention(
                 id="mock-5",
                 message_text="@You Great job on the presentation! Can you share the slides with the marketing team?",
                 sender_name="Lisa Park",
                 sender_email="lisa.p@company.com",
-                chat_name="Marketing Collab",
-                timestamp=datetime.now() - timedelta(days=1),
+                chat_name="Lisa Park",
+                timestamp=now - timedelta(days=1),
                 is_from_channel=False,
+                chat_type="individual",
+                chat_id="mock-chat-5",
+                requested_by="demo_user",
+                requested_at=now - timedelta(days=1),
+                graph_metadata={"chatType": "oneOnOne"},
+                status="Done",
+            ),
+            TeamsMention(
+                id="mock-6",
+                message_text="@You Can we discuss the Q4 roadmap after the standup?",
+                sender_name="Alex Kumar",
+                sender_email="alex.k@company.com",
+                chat_name="Product Sync Meeting",
+                timestamp=now - timedelta(days=1, hours=2),
+                is_from_channel=False,
+                chat_type="meeting",
+                chat_id="mock-chat-6",
+                requested_by="demo_user",
+                requested_at=now - timedelta(days=1, hours=2),
+                graph_metadata={"chatType": "meeting", "meetingId": "meeting-456"},
+                status="In Progress",
             ),
         ]
 
@@ -319,15 +374,19 @@ class TeamsService:
 
     async def get_my_mentions_with_token(self, access_token: str, limit: int = 5) -> List[TeamsMention]:
         """
-        Fetch messages where the user is @mentioned using a user access token.
+        Fetch recent messages from Teams chats using a user access token.
+
+        This uses ChatMessage.Read permission to get 1:1 and group chat messages.
 
         Args:
             access_token: OAuth access token for the authenticated user
-            limit: Maximum number of mentions to return (default: 5)
+            limit: Maximum number of messages to return (default: 5)
 
         Returns:
             List of TeamsMention objects containing message details
         """
+        import re
+
         try:
             headers = {
                 "Authorization": f"Bearer {access_token}",
@@ -337,134 +396,170 @@ class TeamsService:
             mentions = []
 
             async with httpx.AsyncClient() as client:
-                # First, get the user's chats
+                # First, verify the token works by getting user profile
+                print("[TEAMS] Verifying token with /me endpoint...")
+                me_response = await client.get(
+                    f"{self.GRAPH_BASE_URL}/me",
+                    headers=headers,
+                )
+
+                if me_response.status_code != 200:
+                    print(f"[TEAMS] Token invalid: {me_response.status_code}")
+                    raise TeamsServiceError("Invalid access token")
+
+                user_data = me_response.json()
+                user_id = user_data.get("id")
+                print(f"[TEAMS] Authenticated as: {user_data.get('displayName', 'Unknown')} (id: {user_id})")
+
+                # Get user's recent Teams activity - try multiple approaches
+                print("[TEAMS] Fetching recent Teams activity...")
+
+                # Approach 1: Try to get user's mailbox messages (uses Mail.Read)
+                print("[TEAMS] Trying /me/messages endpoint...")
+                messages_response = await client.get(
+                    f"{self.GRAPH_BASE_URL}/me/messages",
+                    headers=headers,
+                    params={
+                        "$top": 20,
+                        "$filter": "from/emailAddress/address ne '{user_data.get('mail', '')}'",
+                        "$select": "id,subject,bodyPreview,from,receivedDateTime,webLink",
+                        "$orderby": "receivedDateTime DESC"
+                    },
+                )
+
+                if messages_response.status_code == 200:
+                    messages = messages_response.json().get("value", [])
+                    print(f"[TEAMS] Found {len(messages)} email messages")
+
+                    for msg in messages[:limit]:
+                        sender = msg.get("from", {}).get("emailAddress", {})
+
+                        mention = TeamsMention(
+                            id=msg.get("id", ""),
+                            message_text=msg.get("subject", "") + " - " + msg.get("bodyPreview", ""),
+                            sender_name=sender.get("name", "Unknown"),
+                            sender_email=sender.get("address"),
+                            channel_name="Email",
+                            team_name="Outlook",
+                            timestamp=datetime.fromisoformat(
+                                msg.get("receivedDateTime", "").replace("Z", "+00:00")
+                            ),
+                            web_url=msg.get("webLink"),
+                            is_from_channel=False,
+                        )
+                        mentions.append(mention)
+
+                    if mentions:
+                        print(f"[TEAMS] Returning {len(mentions)} email messages")
+                        return mentions
+
+                # Approach 2: Try /me/chats (requires Chat.Read)
+                print("[TEAMS] Trying /me/chats endpoint...")
                 chats_response = await client.get(
                     f"{self.GRAPH_BASE_URL}/me/chats",
                     headers=headers,
-                    params={"$top": 50},
+                    params={"$top": 20, "$expand": "members"},
                 )
 
-                if chats_response.status_code != 200:
-                    print(f"[TEAMS] Error fetching chats: {chats_response.text}")
-                    return self._get_mock_mentions(limit)
+                if chats_response.status_code == 200:
+                    chats = chats_response.json().get("value", [])
+                    print(f"[TEAMS] Found {len(chats)} chats")
 
-                chats = chats_response.json().get("value", [])
+                    request_time = datetime.now()
 
-                # For each chat, get recent messages and filter for mentions
-                for chat in chats[:10]:  # Limit to first 10 chats for performance
-                    chat_id = chat.get("id")
-                    if not chat_id:
-                        continue
+                    for chat in chats[:10]:  # Check up to 10 chats
+                        chat_id = chat.get("id")
+                        chat_topic = chat.get("topic") or "Direct Chat"
+                        graph_chat_type = chat.get("chatType", "unknown")  # 'oneOnOne', 'group', 'meeting'
 
-                    messages_response = await client.get(
-                        f"{self.GRAPH_BASE_URL}/me/chats/{chat_id}/messages",
-                        headers=headers,
-                        params={"$top": 20, "$orderby": "createdDateTime desc"},
-                    )
+                        # Determine our chat_type category
+                        if graph_chat_type == "oneOnOne":
+                            our_chat_type = "individual"
+                        elif graph_chat_type == "meeting":
+                            our_chat_type = "meeting"
+                        else:  # 'group' or unknown
+                            our_chat_type = "group"
 
-                    if messages_response.status_code != 200:
-                        continue
+                        # Get chat members for display
+                        members = chat.get("members", [])
+                        member_names = [m.get("displayName", "Unknown") for m in members if m.get("displayName")]
+                        chat_name = chat_topic if chat_topic != "Direct Chat" else ", ".join(member_names[:3])
 
-                    messages = messages_response.json().get("value", [])
+                        print(f"[TEAMS] Checking chat: {chat_name} (type: {our_chat_type}, graph_type: {graph_chat_type})")
 
-                    for msg in messages:
-                        # Check if the message contains mentions
-                        msg_mentions = msg.get("mentions", [])
-                        if msg_mentions:
-                            # Parse the message
+                        # Get messages from this chat
+                        msgs_response = await client.get(
+                            f"{self.GRAPH_BASE_URL}/me/chats/{chat_id}/messages",
+                            headers=headers,
+                            params={"$top": 10},
+                        )
+
+                        if msgs_response.status_code == 403:
+                            print(f"[TEAMS] Permission denied for messages in chat {chat_name}")
+                            continue
+
+                        if msgs_response.status_code != 200:
+                            print(f"[TEAMS] Error fetching messages: {msgs_response.status_code} - {msgs_response.text}")
+                            continue
+
+                        messages = msgs_response.json().get("value", [])
+                        print(f"[TEAMS] Found {len(messages)} messages in {chat_name}")
+
+                        for msg in messages:
+                            msg_type = msg.get("messageType", "")
+                            if msg_type != "message":
+                                continue
+
                             body = msg.get("body", {})
                             content = body.get("content", "")
-
-                            # Strip HTML tags for clean text
-                            import re
                             clean_text = re.sub(r'<[^>]+>', '', content).strip()
 
+                            if not clean_text:
+                                continue
+
                             sender = msg.get("from", {})
-                            user_info = sender.get("user", {}) or sender.get("application", {})
+                            user_info = sender.get("user", {}) or {}
 
                             mention = TeamsMention(
                                 id=msg.get("id", ""),
                                 message_text=clean_text,
                                 sender_name=user_info.get("displayName", "Unknown"),
                                 sender_email=user_info.get("email"),
-                                chat_name=chat.get("topic"),
+                                chat_name=chat_name,
+                                team_name="Chat",
                                 timestamp=datetime.fromisoformat(
                                     msg.get("createdDateTime", "").replace("Z", "+00:00")
                                 ),
                                 web_url=msg.get("webUrl"),
                                 is_from_channel=False,
+                                chat_type=our_chat_type,
+                                chat_id=chat_id,
+                                requested_by=user_data.get("userPrincipalName", "unknown"),
+                                requested_at=request_time,
+                                graph_metadata={
+                                    "graphChatType": graph_chat_type,
+                                    "chatTopic": chat_topic,
+                                    "memberCount": len(members),
+                                },
                             )
                             mentions.append(mention)
 
                             if len(mentions) >= limit:
+                                print(f"[TEAMS] Returning {len(mentions)} real messages from chats")
                                 return mentions
 
-                # Also check team channels for mentions
-                teams_response = await client.get(
-                    f"{self.GRAPH_BASE_URL}/me/joinedTeams",
-                    headers=headers,
-                )
+                    if mentions:
+                        print(f"[TEAMS] Returning {len(mentions)} real messages from chats")
+                        return mentions[:limit]
+                else:
+                    print(f"[TEAMS] Chats endpoint failed: {chats_response.status_code} - {chats_response.text}")
 
-                if teams_response.status_code == 200:
-                    teams = teams_response.json().get("value", [])
+                # If no messages found, return mock data
+                print("[TEAMS] No messages found, returning mock data")
+                return self._get_mock_mentions(limit)
 
-                    for team in teams[:5]:  # Limit teams checked
-                        team_id = team.get("id")
-                        team_name = team.get("displayName", "Unknown Team")
-
-                        channels_response = await client.get(
-                            f"{self.GRAPH_BASE_URL}/teams/{team_id}/channels",
-                            headers=headers,
-                        )
-
-                        if channels_response.status_code != 200:
-                            continue
-
-                        channels = channels_response.json().get("value", [])
-
-                        for channel in channels[:3]:  # Limit channels per team
-                            channel_id = channel.get("id")
-                            channel_name = channel.get("displayName", "Unknown Channel")
-
-                            msgs_response = await client.get(
-                                f"{self.GRAPH_BASE_URL}/teams/{team_id}/channels/{channel_id}/messages",
-                                headers=headers,
-                                params={"$top": 10, "$orderby": "createdDateTime desc"},
-                            )
-
-                            if msgs_response.status_code != 200:
-                                continue
-
-                            for msg in msgs_response.json().get("value", []):
-                                if msg.get("mentions"):
-                                    body = msg.get("body", {})
-                                    content = body.get("content", "")
-                                    import re
-                                    clean_text = re.sub(r'<[^>]+>', '', content).strip()
-
-                                    sender = msg.get("from", {})
-                                    user_info = sender.get("user", {}) or {}
-
-                                    mention = TeamsMention(
-                                        id=msg.get("id", ""),
-                                        message_text=clean_text,
-                                        sender_name=user_info.get("displayName", "Unknown"),
-                                        sender_email=user_info.get("email"),
-                                        channel_name=channel_name,
-                                        team_name=team_name,
-                                        timestamp=datetime.fromisoformat(
-                                            msg.get("createdDateTime", "").replace("Z", "+00:00")
-                                        ),
-                                        web_url=msg.get("webUrl"),
-                                        is_from_channel=True,
-                                    )
-                                    mentions.append(mention)
-
-                                    if len(mentions) >= limit:
-                                        return mentions
-
-            return mentions[:limit]
-
+        except TeamsServiceError:
+            raise
         except Exception as e:
             print(f"[TEAMS] Error fetching mentions with token: {e}")
             raise TeamsServiceError(f"Failed to fetch mentions: {str(e)}")
